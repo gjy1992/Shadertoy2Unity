@@ -42,12 +42,12 @@ namespace Shadertoy2Unity
         Regex word = new Regex(@"\w+", RegexOptions.Compiled);
         Regex macroSearch = new Regex(@"^\s*#define\s+(\w+)\s*(\w*)$", RegexOptions.Multiline | RegexOptions.Compiled);
         Regex titlecomment = new Regex(@"^(\s*//.*\n+)+", RegexOptions.Compiled);
-        
-        Regex functions = new Regex(@"\b(vec2|vec3|vec4|mod|fract|mix|texture|textureLod|inversesqrt|textureProj|textureSize|dFdx|dFdy)\b", RegexOptions.Compiled);
+
+        Regex vec = new Regex(@"\bvec(\d)\b", RegexOptions.Compiled);
+        Regex mat = new Regex(@"\bmat(\d)\b", RegexOptions.Compiled);
+        Regex mat2 = new Regex(@"\bmat(\dx\d)\b", RegexOptions.Compiled);
+        Regex functions = new Regex(@"\b(mod|fract|mix|inversesqrt|texture|textureLod|textureLodOffset|textureGrad|textureGradOffset|textureProj|texelFetch|texelFetchOffset|textureSize|dFdx|dFdy)\b", RegexOptions.Compiled);
         Dictionary<string, string> functionsMap = new Dictionary<string, string> {
-            { "vec2", "float2"},
-            { "vec3", "float3"},
-            { "vec4", "float4"},
             { "mod", "fmod"},
             { "fract", "frac"},
             { "mix", "lerp"},
@@ -80,9 +80,9 @@ namespace Shadertoy2Unity
             RegexOptions.Singleline | RegexOptions.Compiled);
         Regex texFunc3 = new Regex(@"\b(tex2Dlod|tex2Dfetch)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
             RegexOptions.Singleline | RegexOptions.Compiled);
-        Regex texFunc4 = new Regex(@"\b(tex2Dlod|tex2Dfetch)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\),\s*((?:[^(),]*(?:\([^)]*?\))*)*)",
+        Regex texFunc4 = new Regex(@"\b(tex2Dlod|tex2Dfetch)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
             RegexOptions.Singleline | RegexOptions.Compiled);
-        Regex texFunc5 = new Regex(@"\b(tex2D)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\),\s*((?:[^(),]*(?:\([^)]*?\))*)*,\s*((?:[^(),]*(?:\([^)]*?\))*)*)",
+        Regex texFunc5 = new Regex(@"\b(tex2D)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
             RegexOptions.Singleline | RegexOptions.Compiled);
 
         Regex iTime = new Regex(@"\biTime\b", RegexOptions.Compiled);
@@ -132,6 +132,9 @@ namespace Shadertoy2Unity
             }
 
             //replace function name
+            res = vec.Replace(res, @"float$1");
+            res = mat.Replace(res, @"float$1x$1");
+            res = mat2.Replace(res, @"float$1");
             res = functions.Replace(res, (Match m) =>
             {
                 if(m.Success && m.Length > 0)
