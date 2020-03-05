@@ -76,7 +76,7 @@ namespace Shadertoy2Unity
         };
         //These regexp cannot handle nested case, but fortunately these functions usually aren't nested.
         Regex floatN = new Regex(@"\b(float2|float3|float4)\b\s*(\(([^(),]*(\([^)]*?\))*)*\))", RegexOptions.Singleline | RegexOptions.Compiled);
-        Regex compare = new Regex(@"\b(lessThan|lessThanEqual|greaterThan|greaterThanEqual|equal|notEqual|matrixCompMult)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
+        Regex compare = new Regex(@"\b(lessThan|lessThanEqual|greaterThan|greaterThanEqual|equal|notEqual|matrixCompMult|atan)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
             RegexOptions.Singleline | RegexOptions.Compiled);
         Regex texFunc3 = new Regex(@"\b(tex2Dlod|tex2Dfetch)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
             RegexOptions.Singleline | RegexOptions.Compiled);
@@ -190,6 +190,8 @@ namespace Shadertoy2Unity
                                     return "(" + content1 + ")!=(" + content2 + ")";
                                 case "matrixCompMult":
                                     return "(" + content1 + ") * (" + content2 + ")";
+                                case "atan":
+                                    return "atan2(" + content1 + ", " + content2 + ")";
                             }
                         }
                         return "";
