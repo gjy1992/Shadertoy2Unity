@@ -75,6 +75,7 @@ namespace Shadertoy2Unity
 //unpackUnorm2x16
         };
         //These regexp cannot handle nested case, but fortunately these functions usually aren't nested.
+        Regex funcs = new Regex(@"\b(float2|float3|float4|lessThan|lessThanEqual|greaterThan|greaterThanEqual|equal|notEqual|matrixCompMult|atan|tex2Dlod|tex2Dfetch|tex2D)\b\s*\(", RegexOptions.Compiled | RegexOptions.Singleline);
         Regex floatN = new Regex(@"\b(float2|float3|float4)\b\s*(\(([^(),]*(\([^)]*?\))*)*\))", RegexOptions.Singleline | RegexOptions.Compiled);
         Regex compare = new Regex(@"\b(lessThan|lessThanEqual|greaterThan|greaterThanEqual|equal|notEqual|matrixCompMult|atan)\b\s*\(((?:[^(),]*(?:\([^)]*?\))*)*),\s*((?:[^(),]*(?:\([^)]*?\))*)*)\)",
             RegexOptions.Singleline | RegexOptions.Compiled);
@@ -89,6 +90,7 @@ namespace Shadertoy2Unity
         Regex iTimeDelta = new Regex(@"\biTimeDelta\b", RegexOptions.Compiled);
         Regex iFrame = new Regex(@"\biFrame\b", RegexOptions.Compiled);
         Regex iFrameRate = new Regex(@"\biFrameRate\b", RegexOptions.Compiled);
+        Regex iResolution = new Regex(@"\biResolution\b", RegexOptions.Compiled);
         Regex iChannelTime = new Regex(@"\biChannelTime\b\[(.*?)\]", RegexOptions.Compiled);
         Regex iChannelResolution = new Regex(@"\biChannelResolution\b\[(.*?)\]", RegexOptions.Compiled);
         Regex iMouse = new Regex(@"\biMouse\b", RegexOptions.Compiled);
@@ -108,7 +110,6 @@ namespace Shadertoy2Unity
             success = true;
             string res = input;
             List<string> shaderFeatures = new List<string>();
-            int feature_startpos = -1;
             //search macro
             var matches = macroSearch.Matches(input);
             foreach(Match m in matches)
@@ -119,8 +120,6 @@ namespace Shadertoy2Unity
                     if (s2 == "")
                     {
                         //this is a feature macro
-                        if (feature_startpos < 0)
-                            feature_startpos = m.Index;
                         res = res.Remove(m.Index, m.Length);
                         if (res.Substring(m.Index).StartsWith("\r\n"))
                             res = res.Remove(m.Index, 2);
@@ -143,149 +142,70 @@ namespace Shadertoy2Unity
                 }
                 return "";
             });
-            res = floatN.Replace(res, (Match m) =>
+            res = ReplaceReg(funcs, res, (string name, List<string> ps) =>
             {
-                if (m.Success && m.Length > 0)
+                switch(name)
                 {
-                    string fname = m.Groups[1].Value;
-                    string content = m.Groups[2].Value;
-                    switch (fname)
-                    {
-                        case "float2":
-                            return content + ".xx";
-                        case "float3":
-                            return content + ".xxx";
-                        case "float4":
-                            return content + ".xxxx";
-                    }
+                    case "tex2D":
+                        return ps.Count == 5;
+                    case "tex2Dlod":
+                    case "tex2Dfetch":
+                        return ps.Count == 3 || ps.Count == 4;
+                    case "lessThan":
+                    case "lessThanEqual":
+                    case "greaterThan":
+                    case "greaterThanEqual":
+                    case "equal":
+                    case "notEqual":
+                    case "matrixCompMult":
+                    case "atan":
+                    case "float2":
+                    case "float3":
+                    case "float4":
+                        return ps.Count == 1;
+                }
+                return true;
+            }, (string name, List<string> ps) =>
+            {
+                switch (name)
+                {
+                    case "float2":
+                        return "(" + ps[0] + ").xx";
+                    case "float3":
+                        return "(" + ps[0] + ").xxx";
+                    case "float4":
+                        return "(" + ps[0] + ").xxxx";
+                    case "lessThan":
+                        return "(" + ps[0] + ")<(" + ps[1] + ")";
+                    case "lessThanEqual":
+                        return "(" + ps[0] + ")<=(" + ps[1] + ")";
+                    case "greaterThan":
+                        return "(" + ps[0] + ")>(" + ps[1] + ")";
+                    case "greaterThanEqual":
+                        return "(" + ps[0] + ")>=(" + ps[1] + ")";
+                    case "equal":
+                        return "(" + ps[0] + ")==(" + ps[1] + ")";
+                    case "notEqual":
+                        return "(" + ps[0] + ")!=(" + ps[1] + ")";
+                    case "matrixCompMult":
+                        return "(" + ps[0] + ") * (" + ps[1] + ")";
+                    case "atan":
+                        return "atan2(" + ps[0] + ", " + ps[1] + ")";
+                    case "tex2Dlod":
+                        if(ps.Count == 3)
+                            return name + "(" + ps[0] + ", float4(" + ps[1] + ", 1.0, " + ps[2] + "))";
+                        else
+                            return name + "(" + ps[0] + ", int4((" + ps[1] + ") + (" + ps[3] + ")/tex2Dsize(" + ps[0] + ", 0).xy, 0.0, " + ps[2] + "))";
+                    case "tex2Dfetch":
+                        if (ps.Count == 3)
+                            return name + "(" + ps[0] + ", int4(" + ps[1] + ", 0, " + ps[2] + "))";
+                        else
+                            return name + "(" + ps[0] + ", int4((" + ps[1] + ") + (" + ps[3] + "), 0, " + ps[2] + "))";
+                    case "tex2D":
+                        return name + "(" + ps[0] + ", (" + ps[1] + ") + (" + ps[4] + ")/tex2Dsize(" + ps[0] + ", 0).xy, " + ps[2] + ", " + ps[4] + ")";
                 }
                 return "";
             });
-            {
-                //recursive replace
-                while (true)
-                {
-                    int count = 0;
-                    res = compare.Replace(res, (Match m) =>
-                    {
-                        count++;
-                        if (m.Success && m.Length > 0)
-                        {
-                            string fname = m.Groups[1].Value;
-                            string content1 = m.Groups[2].Value;
-                            string content2 = m.Groups[3].Value;
-                            switch (fname)
-                            {
-                                case "lessThan":
-                                    return "(" + content1 + ")<(" + content2 + ")";
-                                case "lessThanEqual":
-                                    return "(" + content1 + ")<=(" + content2 + ")";
-                                case "greaterThan":
-                                    return "(" + content1 + ")>(" + content2 + ")";
-                                case "greaterThanEqual":
-                                    return "(" + content1 + ")>=(" + content2 + ")";
-                                case "equal":
-                                    return "(" + content1 + ")==(" + content2 + ")";
-                                case "notEqual":
-                                    return "(" + content1 + ")!=(" + content2 + ")";
-                                case "matrixCompMult":
-                                    return "(" + content1 + ") * (" + content2 + ")";
-                                case "atan":
-                                    return "atan2(" + content1 + ", " + content2 + ")";
-                            }
-                        }
-                        return "";
-                    });
-                    if (count == 0)
-                        break;
-                }
-            }
-            //replace some functions with different signature
-            {
-                //recursive replace
-                while(true)
-                {
-                    int count = 0;
-                    res = texFunc3.Replace(res, (Match m) =>
-                    {
-                        count++;
-                        if (m.Success && m.Length > 0)
-                        {
-                            string fname = m.Groups[1].Value;
-                            string content1 = m.Groups[2].Value;
-                            string content2 = m.Groups[3].Value;
-                            string content3 = m.Groups[4].Value;
-                            switch (fname)
-                            {
-                                case "tex2Dlod":
-                                    return fname + "(" + content1 + ", float4(" + content2 + ", 1.0, " + content3 + "))";
-                                case "tex2Dfetch":
-                                    return fname + "(" + content1 + ", int4(" + content2 + ", 1.0, " + content3 + "))";
-                            }
-                        }
-                        return "";
-                    });
-                    if (count == 0)
-                        break;
-                }
-            }
-            {
-                //recursive replace
-                while (true)
-                {
-                    int count = 0;
-                    res = texFunc4.Replace(res, (Match m) =>
-                    {
-                        count++;
-                        if (m.Success && m.Length > 0)
-                        {
-                            string fname = m.Groups[1].Value;
-                            string content1 = m.Groups[2].Value;
-                            string content2 = m.Groups[3].Value;
-                            string content3 = m.Groups[4].Value;
-                            string content4 = m.Groups[5].Value;
-                            switch (fname)
-                            {
-                                case "tex2Dlod":
-                                    return fname + "(" + content1 + ", int4((" + content2 + ") + (" + content4 + ")/tex2Dsize(" + content1 + ", 0).xy, 1.0, " + content3 + "))";
-                                case "tex2Dfetch":
-                                    return fname + "(" + content1 + ", int4((" + content2 + ") + (" + content4 + "), 1.0, " + content3 + "))";
-                            }
-                        }
-                        return "";
-                    });
-                    if (count == 0)
-                        break;
-                }
-            }
-            {
-                //recursive replace
-                while (true)
-                {
-                    int count = 0;
-                    res = texFunc5.Replace(res, (Match m) =>
-                    {
-                        count++;
-                        if (m.Success && m.Length > 0)
-                        {
-                            string fname = m.Groups[1].Value;
-                            string content1 = m.Groups[2].Value;
-                            string content2 = m.Groups[3].Value;
-                            string content3 = m.Groups[4].Value;
-                            string content4 = m.Groups[5].Value;
-                            string content5 = m.Groups[6].Value;
-                            switch (fname)
-                            {
-                                case "tex2D":
-                                    return fname + "(" + content1 + ", (" + content2 + ") + (" + content5 + ")/tex2Dsize(" + content1 + ", 0).xy, " + content3 + ", " + content4 + ")";
-                            }
-                        }
-                        return "";
-                    });
-                    if (count == 0)
-                        break;
-                }
-            }
 
             //generate shader property
             List<string> shaderProperty = new List<string>();
@@ -407,14 +327,11 @@ namespace Shadertoy2Unity
 
             ";
             //Generate features
-            if (feature_startpos >= 0)
+            foreach(var f in shaderFeatures)
             {
-                foreach(var f in shaderFeatures)
-                {
-                    prefix += "#pragma shader_feature " + f + "\n";
-                }
-                prefix += '\n';
+                prefix += "#pragma shader_feature " + f + "\n";
             }
+            prefix += '\n';
             prefix += string.Join("\n", shaderVariant);
             prefix += @"
                 v2f vert (appdata v)
@@ -436,7 +353,7 @@ namespace Shadertoy2Unity
             var mainFunc = mainImage.Match(res);
             if(mainFunc.Success)
             {
-                string main = "fixed4 frag (v2f i) : SV_Target\n{\n fixed4 fragColor;\n float3 iResolution = float3(_MainTex_TexelSize.zw, 1.0);\nfloat2 fragCoord = i.uv * iResolution.xy;";
+                string main = "fixed4 frag (v2f i) : SV_Target\n{\n fixed4 fragColor;\n float2 fragCoord = i.uv * iResolution.xy;";
                 res = res.Substring(0, mainFunc.Index) + main + res.Substring(mainFunc.Index + mainFunc.Length);
             }
             //res = fragColor.Replace(res, "return ");
@@ -453,6 +370,7 @@ namespace Shadertoy2Unity
                 {
                     resfuncs[i + 1] = resfuncs[i + 1].Substring(0, resfuncs[i + 1].Length - 1) + "\nreturn fragColor;\n}";
                 }
+                resfuncs[i] = funcs;
             }
             res = string.Join("", resfuncs);
 
@@ -471,7 +389,97 @@ namespace Shadertoy2Unity
             return res;
         }
 
+        string ReplaceReg(Regex re, string input, Func<string, List<string>, bool> filter, Func<string, List<string>, string> func)
+        {
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                var m = re.Match(input);
+                while (m.Success)
+                {
+                    string name = m.Groups[1].Value;
+                    int stoppos;
+                    var ps = GetFunctionParams(input, m.Index + m.Length, out stoppos);
+                    bool act = filter(name, ps);
+                    if (act)
+                    {
+                        string replace = func(name, ps);
+                        input = input.Substring(0, m.Index) + replace + input.Substring(stoppos);
+                        stoppos = m.Index + replace.Length;
+                        changed = true;
+                    }
+                    m = re.Match(input, stoppos);
+                }
+            }
+            return input;
+        }
 
+        //input[startpos-1]=( and input[stoppos-1]=)
+        List<string> GetFunctionParams(string input, int startpos, out int stoppos)
+        {
+            List<string> res = new List<string>();
+            stoppos = startpos;
+            char c = input[stoppos];
+            int parentheses_count = 0;
+            int bracket_count = 0;
+            int brace_count = 0;
+            string buf = "";
+            while(true)
+            {
+                if (c == '(')
+                    parentheses_count++;
+                else if (c == '[')
+                    bracket_count++;
+                else if (c == '{')
+                    brace_count++;
+                else if (c == ')')
+                {
+                    parentheses_count--;
+                    if (parentheses_count < 0)
+                        break;
+                }
+                else if (c == ']')
+                {
+                    bracket_count--;
+                    if (bracket_count < 0)
+                        bracket_count = 0;
+                }
+                else if (c == '}')
+                {
+                    brace_count--;
+                    if (brace_count < 0)
+                        brace_count = 0;
+                }
+                else if (c == ',')
+                {
+                    if (parentheses_count + bracket_count + brace_count == 0)
+                    {
+                        res.Add(buf);
+                        buf = "";
+                    }
+                    else
+                    {
+                        buf += c;
+                    }
+                }
+                else
+                    buf += c;
+                if (stoppos == input.Length - 1)
+                    break;
+                stoppos++;
+                c = input[stoppos];
+            }
+            res.Add(buf);
+            stoppos++;
+            for (int i = 0; i < res.Count; i++)
+            {
+                res[i] = res[i].Trim();
+            }
+            if (res.Count == 1 && res[0].Length == 0)
+                res.Clear();
+            return res;
+        }
 
         string AddVariableAssignment(string input)
         {
@@ -480,12 +488,14 @@ namespace Shadertoy2Unity
             {
                 extra += @"#ifdef USE_BUILTIN_TIME
                     iTime=_Time.y;
+                    #endif
                     ";
             }
             if (iTimeDelta.IsMatch(input))
             {
                 extra += @"#ifdef USE_BUILTIN_DELTATIME
                     iTime=unity_DeltaTime.x;
+                    #endif
                     ";
             }
             if (iFrameRate.IsMatch(input))
@@ -493,7 +503,12 @@ namespace Shadertoy2Unity
                 //use 1/smoothDt
                 extra += @"#ifdef USE_BUILTIN_FRAMERATE
                     iFrameRate=unity_DeltaTime.w;
+                    #endif
                     ";
+            }
+            if(iResolution.IsMatch(input))
+            {
+                extra += "float3 iResolution = float3(_MainTex_TexelSize.zw, 1.0);\n";
             }
             return "{" + extra + input.Substring(1);
         }
