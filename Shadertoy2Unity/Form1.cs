@@ -159,6 +159,7 @@ namespace Shadertoy2Unity
                     case "notEqual":
                     case "matrixCompMult":
                     case "atan":
+                        return ps.Count == 2;
                     case "float2":
                     case "float3":
                     case "float4":
